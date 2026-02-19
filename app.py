@@ -49,27 +49,25 @@ def fetch_stock_data(tickers):
             pct_from_bb_low = ((current_price - bb_low) / bb_low) * 100
             pct_from_bb_high = ((current_price - bb_high) / bb_high) * 100
             
-            # Append to list
+            # Append to list with NEW SHORT NAMES
             data.append({
                 "Symbol": symbol,
-                "Current Price": current_price,
-                "Market Cap": market_cap,
-                "52-Week Low": low_52w,
-                "52-Week High": high_52w,
-                "% From 52W Low": pct_from_52w_low,
-                "% From 52W High": pct_from_52w_high,
-                "% From 20D BB Low": pct_from_bb_low,
-                "% From 20D BB High": pct_from_bb_high
+                "Current": current_price,
+                "MCap": market_cap,
+                "52L": low_52w,
+                "52H": high_52w,
+                "%52L": pct_from_52w_low,
+                "%52H": pct_from_52w_high,
+                "%BBL": pct_from_bb_low,
+                "%BBH": pct_from_bb_high
             })
             
         except Exception as e:
-            # RESTORED ERROR LINE
             st.error(f"❌ Error fetching '{symbol}': {e}")
             
     return pd.DataFrame(data)
 
 # --- SESSION STATE SETUP ---
-# This keeps data in memory so it doesn't vanish when you interact with the app
 if "df" not in st.session_state:
     st.session_state.df = pd.DataFrame()
 if "last_updated" not in st.session_state:
@@ -79,7 +77,7 @@ if "last_updated" not in st.session_state:
 st.title("📈 Stock Data Screener")
 
 # Input for symbols
-default_symbols = "AVGO,GOOG,TSM,TQQQ,SOXL,MRVL,CRDO,MU,TSLA,QQQ"
+default_symbols = "AVGO,GOOD,TSM,MRVL,CRDO,SOXL,TQQQ,TSLA,MU"
 ticker_input = st.text_input("Enter Stock Symbols (comma-separated):", default_symbols)
 
 # Wrapper function to update state
@@ -87,14 +85,12 @@ def update_data():
     ticker_list = ticker_input.split(",")
     new_df = fetch_stock_data(ticker_list)
     
-    # Only update state if we got data back (prevents wiping table on total failure)
+    # Only update state if we got data back
     if not new_df.empty:
         st.session_state.df = new_df
-        # Update timestamp to current time
         st.session_state.last_updated = datetime.now().strftime("%Y-%m-%d %I:%M:%S %p")
 
 # --- AUTO-UPDATE LOGIC ---
-# If the dataframe is empty (first time opening the app), load data automatically
 if st.session_state.df.empty:
     with st.spinner("Fetching morning data..."):
         update_data()
@@ -103,15 +99,13 @@ if st.session_state.df.empty:
 col1, col2 = st.columns([3, 1])
 
 with col1:
-    # Display the last updated time
     st.info(f"🕒 **Last Updated:** {st.session_state.last_updated}")
 
 with col2:
-    # Manual Refresh Button
     if st.button("🔄 Refresh Now", use_container_width=True):
         with st.spinner("Pulling latest data..."):
             update_data()
-            st.rerun() # Force a reload to show new data immediately
+            st.rerun() 
 
 # --- DISPLAY LOGIC ---
 if not st.session_state.df.empty:
@@ -125,8 +119,9 @@ if not st.session_state.df.empty:
             elif x >= 1e6: return f"${x/1e6:.2f}M"
         return x
     
-    if 'Market Cap' in df_display.columns:
-        df_display['Market Cap'] = df_display['Market Cap'].apply(format_market_cap)
+    # Check for new column name "MCap"
+    if 'MCap' in df_display.columns:
+        df_display['MCap'] = df_display['MCap'].apply(format_market_cap)
 
     # 2. Define Styling Logic
     def color_percentages(val):
@@ -137,9 +132,9 @@ if not st.session_state.df.empty:
                 return 'color: #ff4b4b; font-weight: bold;' # Red
         return ''
 
-    # Identify columns for specific formatting
-    pct_cols = [c for c in ["% From 52W Low", "% From 52W High", "% From 20D BB Low", "% From 20D BB High"] if c in df_display.columns]
-    price_cols = [c for c in ["Current Price", "52-Week Low", "52-Week High"] if c in df_display.columns]
+    # Identify columns for specific formatting using NEW NAMES
+    pct_cols = [c for c in ["%52L", "%52H", "%BBL", "%BBH"] if c in df_display.columns]
+    price_cols = [c for c in ["Current", "52L", "52H"] if c in df_display.columns]
 
     # 3. Apply Pandas Styler
     styled_df = df_display.style
@@ -160,5 +155,4 @@ if not st.session_state.df.empty:
         styled_df = styled_df.format("{:.2f}", subset=price_cols)
 
     # 4. Render the table
-
     st.dataframe(styled_df, use_container_width=True, hide_index=True)
