@@ -50,8 +50,8 @@ def fetch_stock_data(tickers):
                 "Symbol": symbol,
                 "Current Price": round(current_price, 2),
                 "Market Cap": market_cap,
-                "52-Week Low": round(low_52w, 2),
-                "52-Week High": round(high_52w, 2),
+                "52-Week Low": round(low_52w, 1),
+                "52-Week High": round(high_52w, 1),
                 "% From 52W Low": round(pct_from_52w_low, 2),
                 "% From 52W High": round(pct_from_52w_high, 2),
                 "% From 20D BB Low": round(pct_from_bb_low, 2),
@@ -68,7 +68,7 @@ st.set_page_config(page_title="Stock Data Screener", layout="wide")
 st.title("📈 Stock Data Screener")
 
 # Input field for stock symbols
-default_symbols = "AAPL, MSFT, TSLA, NVDA"
+default_symbols = "AVGO,MRVL,CRDO,SOXL,TSM, MU,TSLA, GOOG,TQQQ,QQQ"
 ticker_input = st.text_input("Enter Stock Symbols (comma-separated):", default_symbols)
 
 # The Refresh Button
@@ -95,7 +95,41 @@ if st.button("Refresh Data"):
                 
             df['Market Cap'] = df['Market Cap'].apply(format_market_cap)
             
-            # Display the DataFrame as an interactive table
-            st.dataframe(df, use_container_width=True, hide_index=True)
+            # --- STYLING & FORMATTING ---
+            
+            # 1. Define formatting logic
+            def color_percentages(val):
+                if isinstance(val, (int, float)):
+                    if val > 0:
+                        return 'color: #2e8b57;' 
+                    elif val < 0:
+                        return 'color: #ff4b4b;' 
+                return ''
+                
+            # 2. Identify which columns are active in the dataframe
+            # (This ensures it works even if you hide columns for mobile)
+            pct_cols = [c for c in ["% From 52W Low", "% From 52W High", "% From 20D BB Low", "% From 20D BB High"] if c in df.columns]
+            price_cols = [c for c in ["Current Price", "52-Week Low", "52-Week High"] if c in df.columns]
+            
+            # 3. Apply the styles
+            styled_df = df.style
+            
+            # Center the data in all cells
+            styled_df = styled_df.set_properties(**{'text-align': 'center'})
+            
+            # Center the headers
+            styled_df = styled_df.set_table_styles([dict(selector='th', props=[('text-align', 'center')])])
+            
+            # Format percentage columns (Color + Add % sign)
+            if pct_cols:
+                styled_df = styled_df.map(color_percentages, subset=pct_cols)
+                styled_df = styled_df.format("{:.2f}%", subset=pct_cols)
+                
+            # Format price columns (Force exactly 2 decimal places)
+            if price_cols:
+                styled_df = styled_df.format("{:.2f}", subset=price_cols)
+            
+            # 4. Display the perfectly formatted table
+            st.dataframe(styled_df, use_container_width=True, hide_index=True)
         else:
             st.warning("No valid data found. Please check your ticker symbols.")
