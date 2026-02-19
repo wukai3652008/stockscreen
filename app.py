@@ -79,7 +79,7 @@ if "last_updated" not in st.session_state:
 st.title("📈 Stock Data Screener")
 
 # Input for symbols
-default_symbols = "AVGO,GOOG,TSM,TQQQ,SOXL,MRVLCRDO,MU,TSLA,QQQ"
+default_symbols = "AVGO,GOOG,TSM,TQQQ,SOXL,MRVL,CRDO,MU,TSLA,QQQ"
 ticker_input = st.text_input("Enter Stock Symbols (comma-separated):", default_symbols)
 
 # Wrapper function to update state
@@ -160,4 +160,5 @@ if not st.session_state.df.empty:
         styled_df = styled_df.format("{:.2f}", subset=price_cols)
 
     # 4. Render the table
+
     st.dataframe(styled_df, use_container_width=True, hide_index=True)
