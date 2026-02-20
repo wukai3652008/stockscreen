@@ -21,13 +21,15 @@ def fetch_stock_data(tickers):
             hist = ticker.history(period="1y")
             info = ticker.info
             
-            # Check if data is empty (invalid symbol)
-            if hist.empty:
-                st.error(f"⚠️ No data found for symbol: '{symbol}'")
+            # Check if data is empty or too short (invalid symbol or brand new IPO)
+            if hist.empty or len(hist) < 2:
+                st.error(f"⚠️ Not enough data found for symbol: '{symbol}'")
                 continue
                 
-            # Current Price
+            # Current & Previous Price (for Daily % Change)
             current_price = hist['Close'].iloc[-1]
+            prev_price = hist['Close'].iloc[-2]
+            daily_pct_change = ((current_price - prev_price) / prev_price) * 100
             
             # Market Cap (Handle missing keys safely)
             market_cap = info.get('marketCap', 'N/A')
@@ -49,10 +51,11 @@ def fetch_stock_data(tickers):
             pct_from_bb_low = ((current_price - bb_low) / bb_low) * 100
             pct_from_bb_high = ((current_price - bb_high) / bb_high) * 100
             
-            # Append to list with NEW SHORT NAMES
+            # Append to list with the new %Chg column
             data.append({
                 "Symbol": symbol,
                 "Current": current_price,
+                "%Chg": daily_pct_change,
                 "MCap": market_cap,
                 "52L": low_52w,
                 "52H": high_52w,
@@ -77,7 +80,7 @@ if "last_updated" not in st.session_state:
 st.title("📈 Stock Data Screener")
 
 # Input for symbols
-default_symbols = "AVGO,GOOG,TSM,MRVL,CRDO,SOXL,TQQQ,TSLA,MU,AMZN,MSFT"
+default_symbols = "AVGO,GOOG,TSM,MRVL,CRDO,SOXL,TQQQ,TSLA,MU"
 ticker_input = st.text_input("Enter Stock Symbols (comma-separated):", default_symbols)
 
 # Wrapper function to update state
@@ -87,6 +90,10 @@ def update_data():
     
     # Only update state if we got data back
     if not new_df.empty:
+        # Sort the dataframe by %BBL from lowest to highest
+        if '%BBL' in new_df.columns:
+            new_df = new_df.sort_values(by='%BBL', ascending=True).reset_index(drop=True)
+            
         st.session_state.df = new_df
         st.session_state.last_updated = datetime.now().strftime("%Y-%m-%d %I:%M:%S %p")
 
@@ -119,7 +126,6 @@ if not st.session_state.df.empty:
             elif x >= 1e6: return f"${x/1e6:.2f}M"
         return x
     
-    # Check for new column name "MCap"
     if 'MCap' in df_display.columns:
         df_display['MCap'] = df_display['MCap'].apply(format_market_cap)
 
@@ -132,8 +138,18 @@ if not st.session_state.df.empty:
                 return 'color: #ff4b4b; font-weight: bold;' # Red
         return ''
 
-    # Identify columns for specific formatting using NEW NAMES
-    pct_cols = [c for c in ["%52L", "%52H", "%BBL", "%BBH"] if c in df_display.columns]
+    # NEW: Row-wise styling to highlight the Symbol if it's in the Buy Zone (< 2% from BBL)
+    def highlight_buy_zone(row):
+        # We check if the BBL% is less than 2.0. If so, apply red color to the 'Symbol' column.
+        return [
+            'color: #ff4b4b; font-weight: bold; text-decoration: underline;' 
+            if col == 'Symbol' and row.get('%BBL', 100) < 2.5 
+            else '' 
+            for col in row.index
+        ]
+
+    # Identify columns for specific formatting
+    pct_cols = [c for c in ["%Chg", "%52L", "%52H", "%BBL", "%BBH"] if c in df_display.columns]
     price_cols = [c for c in ["Current", "52L", "52H"] if c in df_display.columns]
 
     # 3. Apply Pandas Styler
@@ -154,6 +170,8 @@ if not st.session_state.df.empty:
     if price_cols:
         styled_df = styled_df.format("{:.2f}", subset=price_cols)
 
-    # 4. Render the table
+    # Apply the Buy Zone highlight to the Symbol column
+    styled_df = styled_df.apply(highlight_buy_zone, axis=1)
 
+    # 4. Render the table
     st.dataframe(styled_df, use_container_width=True, hide_index=True)
